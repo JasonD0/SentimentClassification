@@ -62,15 +62,21 @@ def define_graph():
     loss tensor: name="loss"
     """
 
-    input_data = tf.placeholder(shape=[BATCH_SIZE], dtype=tf.float32, name="input_data")
-    labels = tf.placeholder(shape=[BATCH_SIZE], dtype=tf.float32, name="labels")
-    dropout_keep_prob = tf.placeholder_with_default(dtype=tf.float32, name="dropout_keep_prob")
+    input_data = tf.placeholder(shape=[BATCH_SIZE, MAX_WORDS_IN_REVIEW, EMBEDDING_SIZE], dtype=tf.float32, name="input_data")
+    labels = tf.placeholder(shape=[None, 2], dtype=tf.float32, name="labels")
+    #dropout_keep_prob = tf.placeholder_with_default(input=??, shape=[BATCH_SIZE], name="dropout_keep_prob")
+    dropout_keep_prob = tf.placeholder_with_default(0.5, shape=(), name="dropout_keep_prob")
 
     # rnn layers
-    lstm_cell = tf.nn.rnn_cell.LSTMCell(128)
-    lstm_cell_dropped = tf.nn.rnn_cell.DropoutWrapper(lstm_cell, output_keep_prob=dropout_keep_prob)
-    lstm_cells = tf.nn.rnn_cell.MultiRNNCell([lstm_cell_dropped for _ in range(2)])
-    rnn_ouputs, final_state = tf.nn.dynamic_rnn(cell=lstm_cells, inputs=input_data, initial_state=lstm_cells.zero_state(BATCH_SIZE, dtype=tf.float32), dtype=tf.float32)
+    lstm_cells = []
+    for _ in range(3):
+        lstm_cell = tf.nn.rnn_cell.LSTMCell(128, state_is_tuple=True)
+        lstm_cell_dropped = tf.nn.rnn_cell.DropoutWrapper(lstm_cell, input_keep_prob=dropout_keep_prob, output_keep_prob=dropout_keep_prob)
+        lstm_cells.append(lstm_cell_dropped)
+
+    multi_cells = tf.nn.rnn_cell.MultiRNNCell(lstm_cells, state_is_tuple=True)
+    rnn_outputs, final_state = tf.nn.dynamic_rnn(cell=multi_cells, inputs=input_data, initial_state=multi_cells.zero_state(BATCH_SIZE, dtype=tf.float32), dtype=tf.float32)
+    rnn_outputs = rnn_outputs[:,-1]
 
     # dense layer 
     w = tf.Variable(tf.random_normal([rnn_outputs.get_shape().as_list()[1], 2], stddev=0.1), dtype=tf.float32, name="weights")
@@ -78,8 +84,8 @@ def define_graph():
     preds = tf.nn.softmax(tf.matmul(rnn_outputs, w) + b)
     loss = tf.reduce_mean(-tf.reduce_sum(labels * tf.log(preds + 1e-7)), name="loss")
 
-    Accuracy = tf.reduce_mean(tf.equal(tf.argmax(predictions,1), tf.argmax(labels,1)), dtype=tf.float32, name="accuracy")
+    Accuracy = tf.reduce_mean(tf.cast(tf.equal(tf.argmax(preds,1), tf.argmax(labels,1)), tf.float32), name="accuracy")
 
-    optimizer = tf.train.GradientDescentOptimizer(learning_rate=1.0)#.minimise(loss)
+    optimizer = tf.train.GradientDescentOptimizer(learning_rate=0.001).minimize(loss)
 
     return input_data, labels, dropout_keep_prob, optimizer, Accuracy, loss
