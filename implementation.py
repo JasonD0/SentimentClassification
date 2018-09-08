@@ -33,6 +33,8 @@ def preprocess(review):
     RETURN: the preprocessed review in string form.
     """
 
+    processed_review = review
+
     return processed_review
 
 
@@ -52,5 +54,32 @@ def define_graph():
     You must return, in the following order, the placeholders/tensors for;
     RETURNS: input, labels, optimizer, accuracy and loss
     """
+
+    """
+    Input placeholder: name="input_data"
+    labels placeholder: name="labels"
+    accuracy tensor: name="accuracy"
+    loss tensor: name="loss"
+    """
+
+    input_data = tf.placeholder(shape=[BATCH_SIZE], dtype=tf.float32, name="input_data")
+    labels = tf.placeholder(shape=[BATCH_SIZE], dtype=tf.float32, name="labels")
+    dropout_keep_prob = tf.placeholder_with_default(dtype=tf.float32, name="dropout_keep_prob")
+
+    # rnn layers
+    lstm_cell = tf.nn.rnn_cell.LSTMCell(128)
+    lstm_cell_dropped = tf.nn.rnn_cell.DropoutWrapper(lstm_cell, output_keep_prob=dropout_keep_prob)
+    lstm_cells = tf.nn.rnn_cell.MultiRNNCell([lstm_cell_dropped for _ in range(2)])
+    rnn_ouputs, final_state = tf.nn.dynamic_rnn(cell=lstm_cells, inputs=input_data, initial_state=lstm_cells.zero_state(BATCH_SIZE, dtype=tf.float32), dtype=tf.float32)
+
+    # dense layer 
+    w = tf.Variable(tf.random_normal([rnn_outputs.get_shape().as_list()[1], 2], stddev=0.1), dtype=tf.float32, name="weights")
+    b = tf.Variable(tf.zeros([2]), dtype=tf.float32, name="biases")
+    preds = tf.nn.softmax(tf.matmul(rnn_outputs, w) + b)
+    loss = tf.reduce_mean(-tf.reduce_sum(labels * tf.log(preds + 1e-7)), name="loss")
+
+    Accuracy = tf.reduce_mean(tf.equal(tf.argmax(predictions,1), tf.argmax(labels,1)), dtype=tf.float32, name="accuracy")
+
+    optimizer = tf.train.GradientDescentOptimizer(learning_rate=1.0)#.minimise(loss)
 
     return input_data, labels, dropout_keep_prob, optimizer, Accuracy, loss
