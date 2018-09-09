@@ -1,4 +1,5 @@
 import tensorflow as tf
+import re 
 
 BATCH_SIZE = 128
 MAX_WORDS_IN_REVIEW = 100  # Maximum length of a review to consider
@@ -32,9 +33,16 @@ def preprocess(review):
         - word find/replace
     RETURN: the preprocessed review in string form.
     """
-
-    processed_review = review
-
+    
+    processed_review = review.lower()
+    for stopWord in stop_words:
+        stopWord = "\b" + stopWord + "\b"
+        processed_review = re.sub(stopWord, '', processed_review)
+        processed_review = re.sub('<br />', '', processed_review)
+        processed_review = re.sub('[_~`!@#$%^&\*\(\)\{\}\[\]:;\"\'\?/>\.<,=-]', '', processed_review)
+        processed_review = processed_review.replace('\\', '')
+        processed_review = processed_review.replace('+', '')
+    
     return processed_review
 
 
@@ -64,12 +72,11 @@ def define_graph():
 
     input_data = tf.placeholder(shape=[BATCH_SIZE, MAX_WORDS_IN_REVIEW, EMBEDDING_SIZE], dtype=tf.float32, name="input_data")
     labels = tf.placeholder(shape=[None, 2], dtype=tf.float32, name="labels")
-    #dropout_keep_prob = tf.placeholder_with_default(input=??, shape=[BATCH_SIZE], name="dropout_keep_prob")
     dropout_keep_prob = tf.placeholder_with_default(0.5, shape=(), name="dropout_keep_prob")
 
     # rnn layers
     lstm_cells = []
-    for _ in range(3):
+    for _ in range(2):
         lstm_cell = tf.nn.rnn_cell.LSTMCell(128, state_is_tuple=True)
         lstm_cell_dropped = tf.nn.rnn_cell.DropoutWrapper(lstm_cell, input_keep_prob=dropout_keep_prob, output_keep_prob=dropout_keep_prob)
         lstm_cells.append(lstm_cell_dropped)
@@ -82,6 +89,7 @@ def define_graph():
     w = tf.Variable(tf.random_normal([rnn_outputs.get_shape().as_list()[1], 2], stddev=0.1), dtype=tf.float32, name="weights")
     b = tf.Variable(tf.zeros([2]), dtype=tf.float32, name="biases")
     preds = tf.nn.softmax(tf.matmul(rnn_outputs, w) + b)
+    #try tf.nn.sigmoid instead of tf.reduce
     loss = tf.reduce_mean(-tf.reduce_sum(labels * tf.log(preds + 1e-7)), name="loss")
 
     Accuracy = tf.reduce_mean(tf.cast(tf.equal(tf.argmax(preds,1), tf.argmax(labels,1)), tf.float32), name="accuracy")
